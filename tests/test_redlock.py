@@ -1,3 +1,7 @@
+# coding: utf-8
+
+import sys
+sys.path.append('.')
 import unittest
 
 from redlock import Redlock, MultipleRedlockException
@@ -6,7 +10,26 @@ from redlock import Redlock, MultipleRedlockException
 class TestRedlock(unittest.TestCase):
 
     def setUp(self):
-        self.redlock = Redlock([{"host": "localhost"}])
+        try:
+            self.redlock = Redlock([{"host": "localhost"}])
+            self.dstlock = Redlock([{"host": "localhost", "port": 6379, "socket_timeout": 0.5},
+                                    {"host": "localhost", "port": 6380, "socket_timeout": 0.5},
+                                    {"host": "localhost", "port": 6381, "socket_timeout": 0.5}])
+        except Exception as e:
+            pass
+
+    '''
+    def test_distribute_locks(self):
+
+        import time
+        while True:
+            if not self.dstlock.lock("fizz", 1000):
+                print ("lock failed")
+            else:
+                print("lock success")
+
+            time.sleep(1)
+    '''
 
     def test_lock(self):
         lock = self.redlock.lock("pants", 100)
@@ -28,7 +51,7 @@ class TestRedlock(unittest.TestCase):
     def test_py3_compatible_encoding(self):
         lock = self.redlock.lock("pants", 1000)
         key = self.redlock.servers[0].get("pants")
-        self.assertEquals(lock.key, key)
+        self.assertEqual(lock.key, key)
 
     def test_ttl_not_int_trigger_exception_value_error(self):
         with self.assertRaises(ValueError):
@@ -41,3 +64,6 @@ class TestRedlock(unittest.TestCase):
         exc_str = str(exc)
         self.assertIn('connection error', exc_str)
         self.assertIn('command timed out', exc_str)
+
+if __name__ == '__main__':
+    unittest.main()

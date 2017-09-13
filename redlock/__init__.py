@@ -5,7 +5,6 @@ import time
 from collections import namedtuple
 
 import redis
-from redis.exceptions import RedisError
 
 # Python 3 compatibility
 string_type = getattr(__builtins__, 'basestring', str)
@@ -59,14 +58,15 @@ class Redlock(object):
                     server = connection_info
                 self.servers.append(server)
             except Exception as e:
-                raise Warning(str(e))
-        self.quorum = (len(connection_list) // 2) + 1
+                pass
 
+        self.quorum = (len(connection_list) // 2) + 1
         if len(self.servers) < self.quorum:
             raise CannotObtainLock(
                 "Failed to connect to the majority of redis servers")
         self.retry_count = retry_count or self.default_retry_count
         self.retry_delay = retry_delay or self.default_retry_delay
+        logging.error("server num:{}".format(len(self.servers)))
 
     def lock_instance(self, server, resource, val, ttl):
         try:
@@ -79,7 +79,7 @@ class Redlock(object):
         try:
             server.eval(self.unlock_script, 1, resource, val)
         except Exception as e:
-            logging.exception("Error unlocking resource %s in server %s", resource, str(server))
+            pass
 
     def get_unique_id(self):
         CHARACTERS = string.ascii_letters + string.digits
@@ -94,22 +94,19 @@ class Redlock(object):
         # drift for small TTLs.
         drift = int(ttl * self.clock_drift_factor) + 2
 
-        redis_errors = list()
         while retry < self.retry_count:
             n = 0
             start_time = int(time.time() * 1000)
-            del redis_errors[:]
             for server in self.servers:
                 try:
                     if self.lock_instance(server, resource, val, ttl):
                         n += 1
-                except RedisError as e:
-                    redis_errors.append(e)
+                except:
+                    pass
+
             elapsed_time = int(time.time() * 1000) - start_time
             validity = int(ttl - elapsed_time - drift)
             if validity > 0 and n >= self.quorum:
-                if redis_errors:
-                    raise MultipleRedlockException(redis_errors)
                 return Lock(validity, resource, val)
             else:
                 for server in self.servers:
@@ -117,6 +114,7 @@ class Redlock(object):
                         self.unlock_instance(server, resource, val)
                     except:
                         pass
+
                 retry += 1
                 time.sleep(self.retry_delay)
         return False
@@ -126,7 +124,5 @@ class Redlock(object):
         for server in self.servers:
             try:
                 self.unlock_instance(server, lock.resource, lock.key)
-            except RedisError as e:
-                redis_errors.append(e)
-        if redis_errors:
-            raise MultipleRedlockException(redis_errors)
+            except:
+                pass
